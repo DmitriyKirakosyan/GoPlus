@@ -10,7 +10,7 @@ type Powerup =
     /// move X% of the pieces in a random direction
     | Shuffle of int
 
-and Color =
+type Color =
     | Black
     | White
     | Neutral

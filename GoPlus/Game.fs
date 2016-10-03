@@ -28,9 +28,9 @@ type Game (size, genop, powerop, seed) =
         nextToMove = Color.Black }
     /// The function to advance the board to the next state, should be the only way the board is changed
     let updateState newState =
-        match state.nextToMove with
-            | Black -> printfn "black's move"
-            | White -> printfn "white's move"
+        //match state.nextToMove with
+        //    | Black -> printfn "black's move"
+        //    | White -> printfn "white's move"
         prevStates.Add state
         state <- newState
 
@@ -67,8 +67,8 @@ type Game (size, genop, powerop, seed) =
                         | [] -> Some comparePiece
                         | (x, y) :: _ ->
                             if comparePiece = cells.[x,y] || cells.[x,y] = Cell.Taken Neutral then 
-                                if cells.[x,y] = Cell.Taken Neutral then
-                                    printf "omg im neutral"
+                                //if cells.[x,y] = Cell.Taken Neutral then
+                                    //printf "omg im neutral"
                                 enclosingColor (List.tail pieces) comparePiece
                             else None
                     if not (List.isEmpty enclosingPieces) then
@@ -80,7 +80,7 @@ type Game (size, genop, powerop, seed) =
                         | Some (Taken White) ->
                             whiteScore <- whiteScore + (List.length group)
                         | Some (Taken Neutral) -> ()
-                        | None -> ()
+                        | _ -> ()
         (float blackScore, (float whiteScore) + 6.5)
     
     /// given a coordinate, returns all the coordinates of the pieces of the group occupying that coordinate, for post game scoring.
@@ -174,7 +174,7 @@ type Game (size, genop, powerop, seed) =
             state |> apply moves |> updateState
             movesMade.Add moves
             timey.Stop ()
-            printfn "took %i ms to complete move" timey.ElapsedMilliseconds
+            //printfn "took %i ms to complete move" timey.ElapsedMilliseconds
             Accept ()
         | Reject message ->
             Reject message
@@ -188,7 +188,7 @@ type Game (size, genop, powerop, seed) =
             match state.nextToMove with
             | Black ->
                 state.black.powerup
-            | White ->
+            | _White ->
                 state.white.powerup
         match powerupToCheck with
         | None -> 1

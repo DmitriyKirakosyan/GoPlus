@@ -99,6 +99,7 @@ let shuffle percent board seed =
             if candidateShifts = [] then
                 shuffle board (List.filter (fun z -> z <> (x, y)) coords) timesLeft
             else
+
                 let newCoord = List.nth candidateShifts (rando.Next (List.length candidateShifts))
                 let newBoard =
                     addPieces (removePieces board [ (x, y) ]) [ ((color, shape), newCoord) ]

@@ -2,6 +2,7 @@
 
 // Consolidation of all game logic, so any user interface's interaction with game logic is requesting actions by game and having them either accepted or rejected
 // Game will check for validity of actions and carry them out itself, so the ui will have no business logic in it and be completely replaceable and still have the same functioning game
+
 open Util
 open Pieces
 open Board
@@ -9,6 +10,7 @@ open Powerup
 open GameOptions
 open BoardGen
 open Player
+open System
 
 /// An error checking type that is returned by all commands to the game
 type ActionResponse<'T> =
@@ -191,7 +193,7 @@ let rec valid (moves : Move list) state prevState =
                     let enclosingColor =
                         match state.nextToMove with
                         | Black -> White
-                        | White -> Black
+                        | _ -> Black //TODO: handle other cases
                     let conditionalColor =
                         if fst piece = Neutral then
                             Neutral //if placing a neutral piece for testing, check for dead pieces that are neutral
@@ -264,7 +266,8 @@ let rec valid (moves : Move list) state prevState =
         Reject message
 
 let apply (moves : Move list) state =
-    printfn "%A" moves
+
+    //printf "%A" moves
     //clear the powerup from the next player to move so that they can hold the next one they capture
     let powerupLessState =
         match moves with
@@ -275,7 +278,7 @@ let apply (moves : Move list) state =
             | Black ->
                 let newBlack = { color = state.black.color; score = state.black.score; powerup = None }
                 { seed = state.seed; black = newBlack; white = state.white; board = state.board; powerups = state.powerups; nextToMove = state.nextToMove }
-            | White ->
+            | _White ->
                 let newWhite = { color = state.white.color; score = state.white.score; powerup = None }
                 { seed = state.seed; black = state.black; white = newWhite; board = state.board; powerups = state.powerups; nextToMove = state.nextToMove }
             

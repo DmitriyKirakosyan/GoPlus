@@ -1,0 +1,20 @@
+﻿<Properties StartupConfiguration="{4D3F9ADC-D351-4559-835D-10496D9952C7}|Default">
+  <MonoDevelop.Ide.Workbench ActiveDocument="iOS/renderers/GameBoardLayoutRenderer.fs">
+    <Files>
+      <File FileName="GoPlus/GameBoardLayout.fs" Line="49" Column="18" />
+      <File FileName="GoPlus/Window.fs" Line="21" Column="10" />
+      <File FileName="GoPlus/Network.fs" Line="8" Column="1" />
+      <File FileName="iOS/renderers/GameBoardLayoutRenderer.fs" Line="23" Column="19" />
+      <File FileName="iOS/AppDelegate.fs" Line="26" Column="1" />
+      <File FileName="Droid/Properties/AssemblyInfo.fs" Line="5" Column="1" />
+      <File FileName="GoPlus/Menu.fs" Line="141" Column="35" />
+      <File FileName="Droid/src/renderers/GameBoardLayoutRenderer.fs" Line="28" Column="18" />
+    </Files>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.ItemProperties.GoPlus.iOS PreferredExecutionTarget="MonoDevelop.IPhone.IPhoneSimulatorTarget.128D9ACF-DEAA-400A-B7DF-9BD06674E9DA" />
+</Properties>

@@ -23,39 +23,43 @@ open Util
 open GameOptions
 open Encoding
 open Network
+open GameBoardLayout
 open System
 open System.Threading
 open System.Collections.Generic
-open System.Drawing
-open System.Windows.Forms
+// open System.Drawing
+open Xamarin.Forms
 
-let brushFromColor color =
+// let colorFromPieceColor color =
+//     match color with
+//     |  Pieces.Color.Neutral -> Color.Gray
+//     |  Pieces.Color.Black -> Color.Black
+//     |  Pieces.Color.White -> Color.White
+//     |  Pieces.Color.Pickup (_) -> Color.Aqua
+
+
+
+let transparentBlack = Color.FromRgba(0x00, 0x00, 0x00, 128) //new SolidBrush (Color.FromArgb (128, Color.Black))
+let transparentWhite = Color.FromRgba(0xff, 0xff, 0xff, 128) //new SolidBrush (Color.FromArgb (128, Color.White))
+
+
+let transparentBrushFromColor (color: Pieces.Color) =
     match color with
-    |  Pieces.Color.Neutral -> Brushes.Gray
-    |  Pieces.Color.Black -> Brushes.Black
-    |  Pieces.Color.White -> Brushes.White
-    |  Pieces.Color.Pickup (_) -> Brushes.Cyan
-
-let transparentBlack = new SolidBrush (Color.FromArgb (128, Color.Black))
-let transparentWhite = new SolidBrush (Color.FromArgb (128, Color.White))
-
-let transparentBrushFromColor color =
-    match color with
-    |  Pieces.Color.Neutral -> Brushes.Gray
-    |  Pieces.Color.Black -> transparentBlack :> Brush
-    |  Pieces.Color.White -> transparentWhite :> Brush
+    |  Pieces.Color.Neutral -> Color.Gray
+    |  Pieces.Color.Black -> Color.Black.MultiplyAlpha(0.5)
+    |  Pieces.Color.White -> Color.White.MultiplyAlpha(0.5)
     | _ -> failwith "there are no transparent brushes of this color"
 
-type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this =
-    inherit Form ()
+type Window (gameSize, gen, powerop, maybeNetwork, seed) as this =
+    inherit ContentPage ()
 
     /// Instance of the signal event from Network
     let signalReceived = new Event<_> ()
 
-    let listenerThread = 
-        match maybeNetwork with
-        | Some (networkOptions) -> Some (new Thread(listen networkOptions.Client signalReceived))
-        | None -> None
+    // let listenerThread = 
+    //     match maybeNetwork with
+    //     | Some (networkOptions) -> Some (new Thread(listen networkOptions.Client signalReceived))
+    //     | None -> None
 
     ///scales a given coordinate by a certain amount and returns it as an int
     let scale coord = (int) ((float coord) * 2.0 / 3.0)
@@ -67,25 +71,28 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
 
     let game = new Game (gameSize, gen, powerop, seed)
 
-    let canPlay () =
-        match maybeNetwork with
-        | Some networkOptions ->
-            match game.Stage with
-            | Scoring -> true
-            | Play ->
-                if game.NextToMove = networkOptions.PlayerColor then
-                    true
-                else
-                    false
-        | None -> true
+    let canPlay = true
+    // let canPlay () =
+    //     match maybeNetwork with
+    //     | Some networkOptions ->
+    //         match game.Stage with
+    //         | Scoring -> true
+    //         | Play ->
+    //             if game.NextToMove = networkOptions.PlayerColor then
+    //                 true
+    //             else
+    //                 false
+    //     | None -> true
 
     /// Board for displaying, should be updated every click
     let mutable intermediateBoard = game.Board
 
-    let mutable squareSize = (scale width) / (gameSize)
+    //let mutable squareSize = (scale width) / (gameSize)
 
     let mutable errorMessage = ""
 
+    let gameStack = StackLayout(VerticalOptions = LayoutOptions.Center)
+    let uiStack = StackLayout(Orientation = StackOrientation.Horizontal)
     let scoreDisplay = new Label ()
     let turnDisplay = new Label ()
     let powerupDisplay = new Label ()
@@ -96,9 +103,20 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
     let makePass () =
         game.Pass () |> ignore
         errorMessage <- ""
-        this.Invalidate ()
+        // this.Invalidate ()
 
-    let undo args =
+    // 320 is set as a temporary solution
+    let boardLayout = GameBoardLayout(gameSize, 320.0)
+
+    let sendMovesAndInvalidate (gameMessage: GameMessage) =
+        // if Option.isSome maybeNetwork then
+        //     let networkOptions = Option.get maybeNetwork
+        //     sendMoves networkOptions.Client gameMessage
+        boardLayout.UpdateFromModel intermediateBoard
+
+  
+
+    let undo =
         errorMessage <- ""
         match List.length curMoves with
         | 0 -> ()
@@ -106,112 +124,111 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
             let lastMove = curMoves.[List.length curMoves - 1]
             curMoves <- allBut curMoves
             intermediateBoard <- game.Board
-            if game.Stage = Scoring && Option.isSome maybeNetwork then
-                let networkOptions = Option.get maybeNetwork
-                sendMoves networkOptions.Client GameMessage.Undo
-            this.Invalidate ()
+            sendMovesAndInvalidate GameMessage.Undo
         | _ ->
             let lastMove = curMoves.[List.length curMoves - 1]
             curMoves <- allBut curMoves
             match game.CalculateState curMoves with
             | Accept (_, intermediateState) ->
                 intermediateBoard <- intermediateState.board
-                if game.Stage = Scoring && Option.isSome maybeNetwork then
-                    let networkOptions = Option.get maybeNetwork
-                    sendMoves networkOptions.Client GameMessage.Undo
-                this.Invalidate ()
+                sendMovesAndInvalidate GameMessage.Undo
             | _ -> failwith "shouldn't be able to fail by removing a move"
 
-    let endGame args =
-        match game.Stage with
-        | Play ->
-            if canPlay () then
-                makePass ()
-                if Option.isSome maybeNetwork then
-                    let networkOptions = Option.get maybeNetwork
-                    sendMoves networkOptions.Client GameMessage.Pass
-                this.Invalidate ()
-        | Scoring ->
-            game.MakeMoves curMoves |> ignore
-            if Option.isSome maybeNetwork then
-                let networkOptions = Option.get maybeNetwork
-                sendMoves networkOptions.Client GameMessage.Pass
-            let (blackScore, whiteScore) = game.CalulateScore ()
-            MessageBox.Show(String.Format("black score: {0}, white score: {1}", blackScore, whiteScore)) |> ignore
-            this.Close ()
+
     
-    let revertMode args =
+    let revertMode =
         let result = game.RevertToPlay ()
         match result with
         | Reject _ -> ()
         | Accept () ->
             intermediateBoard <- game.Board
             curMoves <- []
-            if Option.isSome maybeNetwork then
-                let networkOptions = Option.get maybeNetwork
-                sendMoves networkOptions.Client GameMessage.Revert
-            this.Invalidate ()
+            sendMovesAndInvalidate GameMessage.Revert
 
     do
-        this.Text <- "GoPlus"
-        this.ClientSize <- new Size(width, height)
-        this.SetStyle (ControlStyles.AllPaintingInWmPaint, true)
-        this.SetStyle (ControlStyles.UserPaint, true)
-        this.SetStyle (ControlStyles.OptimizedDoubleBuffer, true)
-        this.FormBorderStyle <- FormBorderStyle.Sizable
-        this.MaximizeBox <- true
-        this.BackColor <- Color.Tan
+        // this.Text <- "GoPlus"
+        // this.ClientSize <- new Size(width, height)
+        // this.SetStyle (ControlStyles.AllPaintingInWmPaint, true)
+        // this.SetStyle (ControlStyles.UserPaint, true)
+        // this.SetStyle (ControlStyles.OptimizedDoubleBuffer, true)
+        // this.FormBorderStyle <- FormBorderStyle.Sizable
+        // this.MaximizeBox <- true
+        // this.BackColor <- Color.Tan
         scoreDisplay.Text <- ""
-        scoreDisplay.Dock <- DockStyle.Right
-        scoreDisplay.AutoSize <- true
+        // scoreDisplay.Dock <- DockStyle.Right
+        // scoreDisplay.AutoSize <- true
         turnDisplay.Text <- ""
-        turnDisplay.Size <- new Size(120, 50) //bad hardcoding make it better eventually
-        turnDisplay.Location <- new Point(this.ClientSize.Width - turnDisplay.Size.Width, scoreDisplay.Size.Height)
+        // turnDisplay.Size <- new Size(120, 50) //bad hardcoding make it better eventually
+        // turnDisplay.Location <- new Point(this.ClientSize.Width - turnDisplay.Size.Width, scoreDisplay.Size.Height)
         powerupDisplay.Text <- ""
-        powerupDisplay.Size <- new Size(120, 50) //bad hardcoding make it better eventually
-        powerupDisplay.Location <- new Point(this.ClientSize.Width - turnDisplay.Size.Width, scoreDisplay.Size.Height + turnDisplay.Height)
+        // powerupDisplay.Size <- new Size(120, 50) //bad hardcoding make it better eventually
+        // powerupDisplay.Location <- new Point(this.ClientSize.Width - turnDisplay.Size.Width, scoreDisplay.Size.Height + turnDisplay.Height)
         undoButton.Text <- "Undo"
-        undoButton.Dock <- DockStyle.Bottom
-        undoButton.AutoSize <- true
-        undoButton.Click.Add undo
+        // undoButton.Dock <- DockStyle.Bottom
+        // undoButton.AutoSize <- true
+        undoButton.Clicked.Add( fun _ -> undo )
         endGameButton.Text <- "Pass"
-        endGameButton.Dock <- DockStyle.Bottom
-        endGameButton.AutoSize <- true
-        endGameButton.Click.Add endGame
+        // endGameButton.Dock <- DockStyle.Bottom
+        // endGameButton.AutoSize <- true
+        endGameButton.Clicked.Add(fun _ ->  this.EndGame)
         revertButton.Text <- "Revert"
-        revertButton.Dock <- DockStyle.Bottom
-        revertButton.AutoSize <- true
-        revertButton.Click.Add revertMode
-        this.Controls.AddRange [| scoreDisplay; turnDisplay; powerupDisplay; endGameButton; undoButton; revertButton |]
+        // revertButton.Dock <- DockStyle.Bottom
+        // revertButton.AutoSize <- true
+        revertButton.Clicked.Add( fun _ -> revertMode )
+
+        uiStack.Children.AddRange [ scoreDisplay; turnDisplay; powerupDisplay; endGameButton; undoButton; revertButton ]
+
+        gameStack.Children.AddRange [uiStack; boardLayout]
+        this.Content <- gameStack
+
+        boardLayout.OnFieldTap <- this.OnBoardTap
+
+
         signalReceived.Publish.Add (this.OnSignalReceived)
         
 
         //if there is a listener thread, start it now
-        match listenerThread with
-        | Some thread -> thread.Start ()
-        | None -> ()
+        // match listenerThread with
+        // | Some thread -> thread.Start ()
+        // | None -> ()
 
-    override this.OnClosed args =
-        Environment.Exit (0)
+
+    member private this.DisplayScore =
+        let (blackScore, whiteScore) = game.CalulateScore ()
+        this.DisplayAlert("Score", String.Format("black score: {0}, white score: {1}", blackScore, whiteScore), "ok") |> ignore
+    
+
+    member private this.EndGame =
+        match game.Stage with
+        | Play ->
+            if canPlay then
+                makePass ()
+                sendMovesAndInvalidate GameMessage.Pass
+        | Scoring ->
+            game.MakeMoves curMoves |> ignore
+            sendMovesAndInvalidate GameMessage.Pass
+            this.DisplayScore
+            // .Show(String.Format("black score: {0}, white score: {1}", blackScore, whiteScore)) |> ignore
+            base.Navigation.PopAsync() |> ignore
+
+    // override this.OnClosed args =
+    //     Environment.Exit (0)
 
     // Window will handle timer and whose turn it is, it will translate ui actions into function calls on Game.
     // It decides when things happen, Game implements them
-    override this.OnMouseMove args =
-        mouseX <- args.X
-        mouseY <- args.Y
-        this.Invalidate ()
+    // override this.OnMouseMove args =
+    //     mouseX <- args.X
+    //     mouseY <- args.Y
+        // this.Invalidate ()
 
-    override this.OnResize args =
-        base.OnResize args
-        squareSize <- (scale this.ClientSize.Width ) / gameSize
-        turnDisplay.Location <- new Point(this.ClientSize.Width - turnDisplay.Size.Width, scoreDisplay.Size.Height)
-        this.Invalidate ()
+    // override this.OnResize args =
+    //     base.OnResize args
+    //     squareSize <- (scale this.ClientSize.Width ) / gameSize
+    //     turnDisplay.Location <- new Point(this.ClientSize.Width - turnDisplay.Size.Width, scoreDisplay.Size.Height)
+    //     this.Invalidate ()
     
-    override this.OnMouseDown args =
-        if args.X < scale this.ClientSize.Width && args.Y < scale this.ClientSize.Width 
-           && canPlay () then
-            let x = args.X / squareSize
-            let y = args.Y / squareSize
+    member this.OnBoardTap (x, y) =
+        if canPlay then
             let moves = curMoves @ [(x, y)]
             if game.GetMovesNeeded () = List.length moves && game.Stage = Play then
                 match game.MakeMoves moves with
@@ -220,9 +237,7 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
                     curMoves <- []
                     errorMessage <- ""
                     //send the moves to the other player
-                    if Option.isSome maybeNetwork then
-                        let networkOptions = Option.get maybeNetwork
-                        sendMoves networkOptions.Client (GameMessage.Moves moves)
+                    sendMovesAndInvalidate (GameMessage.Moves moves)
                 | Reject message ->
                     errorMessage <- message
             else
@@ -231,13 +246,9 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
                     intermediateBoard <- intermediateState.board
                     curMoves <- moves
                     errorMessage <- ""
-                    if game.Stage = Scoring && Option.isSome maybeNetwork then
-                    //send the intermediate move if it's scoring mode
-                        let networkOptions = Option.get maybeNetwork
-                        sendMoves networkOptions.Client (GameMessage.Moves moves)
+                    if game.Stage = Scoring then sendMovesAndInvalidate (GameMessage.Moves moves)
                 | Reject message ->
                     errorMessage <- message
-            this.Invalidate ()
 
     [<CLIEvent>]
     member this.SignalReceived = signalReceived.Publish
@@ -252,12 +263,12 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
             match curMoves with
             | [] ->
                 intermediateBoard <- game.Board
-                this.Invalidate ()
+                // this.Invalidate ()
             | _ ->
                 match game.CalculateState curMoves with
                 | Accept (_, intermediateState) ->
                     intermediateBoard <- intermediateState.board
-                    this.Invalidate ()
+                    // this.Invalidate ()
                 | _ -> failwith "the other player is broken or cheating"
         | Pass ->
             match game.Stage with
@@ -265,21 +276,20 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
             | Scoring ->
                 //end the game
                 game.MakeMoves curMoves |> ignore
-                let (blackScore, whiteScore) = game.CalulateScore ()
-                MessageBox.Show(String.Format("black score: {0}, white score: {1}", blackScore, whiteScore)) |> ignore
-                this.Invoke(new MethodInvoker (this.Close)) |> ignore
+                this.DisplayScore
+                // this.Invoke(new MethodInvoker (this.Close)) |> ignore
         | Revert ->
             match game.RevertToPlay () with
             | Accept () ->
                 intermediateBoard <- game.Board
                 curMoves <- []
-                this.Invalidate ()
+                // this.Invalidate ()
             | Reject message ->
                 failwith "the other player is broken or cheating"
         | Moves moves ->
             if game.GetMovesNeeded () = List.length moves 
                 && game.Stage = Play 
-                && not (canPlay ()) then
+                && not canPlay then
                 match game.MakeMoves moves with
                 | Accept () ->
                     intermediateBoard <- game.Board
@@ -293,86 +303,86 @@ type Window (gameSize, gen, powerop, width, height, maybeNetwork, seed) as this 
                     intermediateBoard <- intermediateState.board
                     errorMessage <- ""
                 | _ -> failwith "the other player is broken or cheating"
-        this.Invalidate ()
+        // this.Invalidate ()
     
-    override this.OnPaint args =
-        endGameButton.Text <- 
-            match game.Stage with
-            | Play -> "Pass"
-            | Scoring -> "End Game"
+    // override this.OnPaint args =
+    //     endGameButton.Text <- 
+    //         match game.Stage with
+    //         | Play -> "Pass"
+    //         | Scoring -> "End Game"
             
-        scoreDisplay.Text <-
-            let scoreString = 
-                match maybeNetwork with
-                | Some networkOptions -> String.Format("score: {0}", game.GetScore networkOptions.PlayerColor)
-                | None -> String.Format("current player's score: {0}", game.GetScore game.NextToMove)
-            match game.Stage with
-            | Play -> scoreString
-            | Scoring -> ""
+    //     scoreDisplay.Text <-
+    //         let scoreString = String.Format("current player's score: {0}", game.GetScore game.NextToMove) 
+    //             // match maybeNetwork with
+    //             // | Some networkOptions -> String.Format("score: {0}", game.GetScore networkOptions.PlayerColor)
+    //             // | None -> String.Format("current player's score: {0}", game.GetScore game.NextToMove)
+    //         match game.Stage with
+    //         | Play -> scoreString
+    //         | Scoring -> ""
 
-        turnDisplay.Text <-
-            match game.Stage with
-            | Play ->
-                match game.NextToMove with
-                | Black ->
-                    "Black's move"
-                | White ->
-                    "White's move"
-                | _ -> failwith "it can only be White or Black's turn during play"
-            | Scoring ->
-                "Scoring Mode"
+    //     turnDisplay.Text <-
+    //         match game.Stage with
+    //         | Play ->
+    //             match game.NextToMove with
+    //             | Black ->
+    //                 "Black's move"
+    //             | White ->
+    //                 "White's move"
+    //             | _ -> failwith "it can only be White or Black's turn during play"
+    //         | Scoring ->
+    //             "Scoring Mode"
 
-        powerupDisplay.Text <-
-            match errorMessage with
-            | "" ->
-                match game.Stage with
-                | Play ->
-                    let color =
-                        match maybeNetwork with
-                        | None -> game.NextToMove
-                        | Some networkOptions -> networkOptions.PlayerColor
-                    match game.GetPlayerPowerup color with
-                    | None ->
-                        "No Powerup"
-                    | Some x ->
-                        match canPlay () with
-                        | true -> 
-                            String.Format("{0}, {1} moves remaining", Powerup.powerupString x color, game.GetMovesNeeded () - List.length curMoves)
-                        | false -> Powerup.powerupString x color
+    //     powerupDisplay.Text <-
+    //         match errorMessage with
+    //         | "" ->
+    //             match game.Stage with
+    //             | Play ->
+    //                 let color = game.NextToMove
+    //                     // match maybeNetwork with
+    //                     // | None -> game.NextToMove
+    //                     // | Some networkOptions -> networkOptions.PlayerColor
+    //                 match game.GetPlayerPowerup color with
+    //                 | None ->
+    //                     "No Powerup"
+    //                 | Some x ->
+    //                     match canPlay with
+    //                     | true -> 
+    //                         String.Format("{0}, {1} moves remaining", Powerup.powerupString x color, game.GetMovesNeeded () - List.length curMoves)
+    //                     | false -> Powerup.powerupString x color
                         
-                | Scoring ->
-                    ""
-            | x -> x
+    //             | Scoring ->
+    //                 ""
+    //         | x -> x
 
-        let size1 = Array2D.length1 game.Board
-        let size2 = Array2D.length2 game.Board
-        for i = 0 to size1 - 1 do
-            args.Graphics.DrawLine(Pens.Black, 0, i * squareSize + (squareSize / 2), scale this.ClientSize.Width, i * squareSize + (squareSize / 2))
-        for j = 0 to size2 - 1 do
-            args.Graphics.DrawLine(Pens.Black, j * squareSize + (squareSize / 2), 0, j * squareSize + (squareSize / 2), scale this.ClientSize.Width)
+    //     let size1 = Array2D.length1 game.Board
+    //     let size2 = Array2D.length2 game.Board
+    //     for i = 0 to size1 - 1 do
+    //         args.Graphics.DrawLine(Pens.Black, 0, i * squareSize + (squareSize / 2), scale this.ClientSize.Width, i * squareSize + (squareSize / 2))
+    //     for j = 0 to size2 - 1 do
+    //         args.Graphics.DrawLine(Pens.Black, j * squareSize + (squareSize / 2), 0, j * squareSize + (squareSize / 2), scale this.ClientSize.Width)
 
-        //draw a ghost piece over where the player would place a piece
-        if mouseX < scale this.ClientSize.Width && mouseY < scale this.ClientSize.Width then
-            match game.Stage with
-            | Play ->
-                let x = mouseX / squareSize
-                let y = mouseY / squareSize
-                if boundCheck (x, y) size1 size2 then
-                    let color =
-                        match maybeNetwork with
-                        | Some networkOptions -> networkOptions.PlayerColor
-                        | None -> game.NextToMove
-                    args.Graphics.FillEllipse(transparentBrushFromColor(color), x * squareSize, y * squareSize, squareSize, squareSize) 
-            | Scoring -> ()
+    //     //draw a ghost piece over where the player would place a piece
+    //     if mouseX < scale this.ClientSize.Width && mouseY < scale this.ClientSize.Width then
+    //         match game.Stage with
+    //         | Play ->
+    //             let x = mouseX / squareSize
+    //             let y = mouseY / squareSize
+    //             if boundCheck (x, y) size1 size2 then
+    //                 let color =
+    //                     match maybeNetwork with
+    //                     | Some networkOptions -> networkOptions.PlayerColor
+    //                     | None -> game.NextToMove
+    //                 args.Graphics.FillEllipse(transparentBrushFromColor(color), x * squareSize, y * squareSize, squareSize, squareSize) 
+    //         | Scoring -> ()
 
-        for i = 0 to size1 - 1 do
-            for j = 0 to size2 - 1 do
-                match intermediateBoard.[i,j] with
-                | Some (color, Normal) ->
-                    args.Graphics.FillEllipse(brushFromColor(color), i * squareSize, j * squareSize, squareSize, squareSize)
-                | Some (color, Big (xext, yext)) ->
-                    args.Graphics.FillEllipse(brushFromColor(color), (i - xext) * squareSize, (j - yext) * squareSize, squareSize * (1 + 2 * xext), squareSize * (1 + 2 * yext))
-                | Some (color, L) ->
-                    args.Graphics.FillEllipse(brushFromColor(color), (i) * squareSize, (j) * squareSize, squareSize, squareSize * 2)
-                    args.Graphics.FillEllipse(brushFromColor(color), (i - 2) * squareSize, (j) * squareSize, squareSize * 2, squareSize)
-                | None -> ()
+    //     for i = 0 to size1 - 1 do
+    //         for j = 0 to size2 - 1 do
+    //             match intermediateBoard.[i,j] with
+    //             | Some (color, Normal) ->
+    //                 args.Graphics.FillEllipse(brushFromColor(color), i * squareSize, j * squareSize, squareSize, squareSize)
+    //             | Some (color, Big (xext, yext)) ->
+    //                 args.Graphics.FillEllipse(brushFromColor(color), (i - xext) * squareSize, (j - yext) * squareSize, squareSize * (1 + 2 * xext), squareSize * (1 + 2 * yext))
+    //             | Some (color, L) ->
+    //                 args.Graphics.FillEllipse(brushFromColor(color), (i) * squareSize, (j) * squareSize, squareSize, squareSize * 2)
+    //                 args.Graphics.FillEllipse(brushFromColor(color), (i - 2) * squareSize, (j) * squareSize, squareSize * 2, squareSize)
+    //             | None -> ()

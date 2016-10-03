@@ -1,5 +1,6 @@
-﻿module Player
-open Util
+﻿
+module Player
+
 open Pieces
 
 type Player = {

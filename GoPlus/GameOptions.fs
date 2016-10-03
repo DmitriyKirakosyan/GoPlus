@@ -1,4 +1,5 @@
 ﻿module GameOptions
+
 /// What extra features are generated at board creation
 type GenOption =
     {

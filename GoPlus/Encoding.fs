@@ -4,7 +4,6 @@ open Gameplay
 open GameOptions
 open Pieces
 open System
-open System.Net.Sockets
 
 type GameMessage =
     | Moves of (int * int) list
